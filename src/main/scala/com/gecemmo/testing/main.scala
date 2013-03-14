@@ -8,7 +8,7 @@ import akka.event.Logging
 import akka.util.Timeout
 import akka.pattern.ask
 
-// Actor message
+// Actor messages
 case class Start()
 case class DoWork()
 case class Started()
@@ -20,7 +20,7 @@ case class StartFetch(count: Int)
  *
  *  Responsible for fetching data from specific company
  */
-class MisAgentChildActor(company: String) extends Actor with ActorLogging {
+class SampleAgentChildActor(company: String) extends Actor with ActorLogging {
 
   override def preStart() = {
     log.info(self.path + " :: " + company + " started")
@@ -46,9 +46,10 @@ class MisAgentChildActor(company: String) extends Actor with ActorLogging {
  *   - Start of children
  *   - Managing data fetching
  */
-class MisAgentParentActor(childConfig: List[String]) extends Actor with ActorLogging {
+class SampleAgentParentActor(childConfig: List[String]) extends Actor with ActorLogging {
 
-  def childName: String = "mischildagent"
+  def childName: String = "samplechildagent"
+  implicit val timeout = Timeout(30000)
 
   override def preStart() = {
     log.info(self.path + " started")
@@ -62,12 +63,17 @@ class MisAgentParentActor(childConfig: List[String]) extends Actor with ActorLog
   }
 
   def childActorName(str: String) =
-  // Replaces unwanted characters (must be valid actor name)
+    // Replaces unwanted characters (must be valid actor name)
     """[åäö\ ]""".r.replaceAllIn(childName + "_" + str.toLowerCase, x => x.group(0) match {case "å" | "ä" => "a" case "ö" => "o" case _ => ""})
+
+  def startChild(name: String) = {
+      val childActor = context.actorOf(Props(new SampleAgentChildActor(name)), childActorName(name))
+       Await.ready(childActor ? Start(), timeout.duration)
+    }
 
   def receive = {
     case Start() =>
-      childConfig.foreach(name => context.actorOf(Props(new MisAgentChildActor(name)), childActorName(name)))
+      childConfig.foreach(name => startChild(name))      
       sender ! Started()
 
     case StartFetch(count: Int) =>
@@ -80,18 +86,17 @@ class MisAgentParentActor(childConfig: List[String]) extends Actor with ActorLog
 }
 
 object ScalaCalc extends App {
-  println("FsAPI :: MisAgent system")
+  println("API :: SampleAgent system")
 
-  val system = ActorSystem("MisAgent")
+  val system = ActorSystem("SampleAgent")
   implicit val timeout = Timeout(30000)
 
   // List of companies
-  val childConfig: List[String] = List("Alecta", "AMF", "Danica", "Förenade Liv", 
-              "Länsförsäkringar", "Movestic", "Nordnet", "SEB", "Skandia", "SPP")
+  val childConfig: List[String] = List("CompanyA", "CompanyB", "CompanyC", "CompanyD")
 
   val application = system.actorOf(
-    props = Props(new MisAgentParentActor(childConfig)),
-    name = "misparentagent"
+    props = Props(new SampleAgentParentActor(childConfig)),
+    name = "sampleparentagent"
   )
 
   Await.ready(application ? Start(), timeout.duration)
